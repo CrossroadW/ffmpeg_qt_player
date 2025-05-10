@@ -1,25 +1,9 @@
-# FFmpegExample
-本项目第一阶段目标是集成FFmpeg的各种使用示例子，大家可以取出来用于后续编码过程中的代考代码
-第二阶段目标是开发一款集成各种功能音视频播放器
+# 参考
+https://www.bilibili.com/video/BV1Xw4m1y7H3
+https://github.com/SnailCoderGu/FFmpegExample
 
-对应博客讲解地址: https://juejin.cn/user/3261574409623161
-讲解视频: https://space.bilibili.com/631609103
-
-![Uploading image.png…]()
-
-
-### 版本
-
-v1.1.0
-1. 增加了qt的支持，有界面了
-2. 播放器支持菜单打开文件
-3. 支持暂停/恢复，停止，前进/后退，显示播放时间
-4. 支持视频框随拖动等比缩放
-
-v1.0.0
-
-1. 支持AVForamt 打开文件，解析视频流信息
-2. 支持音频解码为pcm，写文件
-3. 支持音频pcm格式转换并写文件
-4. 支持视频解码，并写yuv文件
-
+# 修改部分
+适配 linux
+CMake 构建
+tests目录 是我的学习过程
+player目录是参考原项目的代码，重新实现了播放器
