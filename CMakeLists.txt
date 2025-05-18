@@ -22,5 +22,5 @@ link_libraries(avformat avcodec avutil swscale
 include_directories(/usr/include/ffmpeg install/include)
 add_subdirectory(player)
 include_directories(.)
-add_executable(${PROJECT_NAME} ${SOURCES})
+#add_executable(${PROJECT_NAME} ${SOURCES})
 #add_subdirectory(tests)

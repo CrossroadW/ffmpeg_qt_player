@@ -3,35 +3,34 @@
 #include <QWidget>
 #include <array>
 #include "Demuxer.h"
-
+#include <QOpenGLWidget>
+#include <QOpenGLFunctions>
 class PlayerController;
+// #define use_gl_widget
 
-class PlayerWidget : public QWidget {
+class PlayerWidget :
+#ifdef use_gl_widget
+    public QOpenGLWidget,
+protected QOpenGLFunctions
+#else
+    public QWidget
+#endif
+{
     Q_OBJECT
 
 public:
-
     explicit PlayerWidget(QWidget *parent = nullptr);
+
+#ifdef   use_gl_widget
+    void initializeGL() override;
+    void paintGL() override;
+#else
     void paintEvent(QPaintEvent *event) override;
+#endif
 
 public Q_SLOTS:
     void onFrameChanged(VideoFrame);
+    void onFrameChanged(VideoFrame2);
 
 private:
 };
-//
-// class RendererBridge : public QObject {
-//     Q_OBJECT
-//
-// public:
-//     explicit RendererBridge(PlayerWidget *render = nullptr,QObject *parent = nullptr);
-//     void setRenderWidget(PlayerWidget *render);
-//     PlayerWidget* renderWidget();
-//     void setPlayerController(PlayerController *controller);
-//     PlayerController* playerController();
-// Q_SIGNALS:
-//     void frameChanged(VideoFrame const &);
-// private:
-//     PlayerWidget *mRender{};
-//     PlayerController *mPlayerController{};
-// };

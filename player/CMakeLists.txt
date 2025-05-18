@@ -6,3 +6,7 @@ include_directories(/usr/include/ffmpeg)
 find_package(spdlog CONFIG REQUIRED)
 
 target_link_libraries(player PRIVATE Boost::thread spdlog::spdlog)
+target_compile_options(player PRIVATE
+    -Werror=return-type
+
+)

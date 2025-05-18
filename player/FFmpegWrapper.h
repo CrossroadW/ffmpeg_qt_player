@@ -33,6 +33,7 @@ public:
 
     struct HasError {
         bool hasError{};
+        int errorCode{};
 
         operator bool() const {
             return hasError;
@@ -43,8 +44,8 @@ public:
         }
     };
 
-    static constexpr HasError NoError = {false};
-    static constexpr HasError Error = {true};
+    static constexpr HasError NoError = {false, 0};
+    static constexpr HasError Error = {true, 0};
 
     static HasError warnOnError(bool expected, int ret,
                                 std::source_location loc =
@@ -95,6 +96,11 @@ public:
         packet = av_packet_alloc();
 
         int read_ret = av_read_frame(formatCtx, packet);
+        // 跳转到文件开头（时间戳 0，使用 AVSEEK_FLAG_BACKWARD 确保关键帧）
+        if (read_ret == AVERROR_EOF) {
+            spdlog::error("Seek failed after EOF");
+            return {true, AVERROR_EOF};
+        }
         if (warnOnError(read_ret == 0, read_ret)) {
             return Error;
         }
@@ -123,8 +129,10 @@ public:
                                 AVPacket *&originalPacket,
                                 std::vector<AVFrame *> &frames) {
         int ret = avcodec_send_packet(codecCtx, originalPacket);
+        if (AVERROR_EOF == ret) {
+            return Error;
+        }
         if (warnOnError(ret == 0, ret).hasErr()) {
-            av_packet_free(&originalPacket);
             return Error;
         }
         // av_packet_free(&originalPacket);
@@ -149,15 +157,16 @@ public:
                                 std::vector<uint8_t> &aligned_u,
                                 std::vector<uint8_t> &aligned_v) {
         if (frame->format != AV_PIX_FMT_YUV420P) {
+            spdlog::error("decodeVideo format:{}", frame->format);
             return Error;
         }
-        spdlog::info("decodeVideo width:{} height:{}", frame->width,
-                     frame->height);
+
         int y_size = frame->width * frame->height;
         int uv_size = y_size / 4;
         aligned_y = std::vector<uint8_t>(y_size);
         aligned_u = std::vector<uint8_t>(uv_size);
         aligned_v = std::vector<uint8_t>(uv_size);
+
         if (frame->linesize[0] == frame->width && frame->linesize[1] == frame->
             width / 2) {
             std::memcpy(
@@ -206,162 +215,6 @@ public:
     }
 
 
-    // struct SwrResample {
-    //     struct AudioPlayer {
-    //         ~AudioPlayer() {
-    //             if (audioOutput) {
-    //                 audioOutput->stop();
-    //             }
-    //         }
-    //
-    //         void SetFormat(int rate, int sample_size,
-    //                        int nch) {
-    //             QAudioFormat format;
-    //             format.setSampleRate(rate);
-    //             format.setChannelCount(nch);
-    //             format.setSampleSize(sample_size);
-    //             format.setCodec("audio/pcm");
-    //             format.setByteOrder(QAudioFormat::LittleEndian);
-    //             format.setSampleType(QAudioFormat::SignedInt);
-    //
-    //             audioOutput = new QAudioOutput(format);
-    //             audioOutput->setVolume(1.0);
-    //             outputDevice = audioOutput->start();
-    //         }
-    //
-    //         void writeData(const char *data, qint64 len) {
-    //             if (outputDevice)
-    //                 outputDevice->write(data, len);
-    //         }
-    //
-    //     private:
-    //         QIODevice *outputDevice{};
-    //         QAudioOutput *audioOutput{};
-    //     };
-    //
-    //     int Init(int64_t src_ch_layout, int64_t dst_ch_layout,
-    //              int src_rate, int dst_rate,
-    //              AVSampleFormat src_sample_fmt,
-    //              AVSampleFormat dst_sample_fmt,
-    //              int src_nb_samples) {
-    //         src_sample_fmt_ = src_sample_fmt;
-    //         dst_sample_fmt_ = dst_sample_fmt;
-    //
-    //         int ret;
-    //         /* create resampler context */
-    //         swr_ctx = swr_alloc();
-    //         if (!swr_ctx) {
-    //             spdlog::error("Could not allocate resampler context");
-    //             return AVERROR(ENOMEM);
-    //         }
-    //
-    //         if (src_sample_fmt == AV_SAMPLE_FMT_NONE ||
-    //             dst_sample_fmt == AV_SAMPLE_FMT_NONE) {
-    //             spdlog::error("Invalid sample format!");
-    //             return -1;
-    //         }
-    //
-    //         av_opt_set_int(swr_ctx, "in_channel_layout", src_ch_layout, 0);
-    //         av_opt_set_int(swr_ctx, "in_sample_rate", src_rate, 0);
-    //         av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", src_sample_fmt, 0);
-    //
-    //         av_opt_set_int(swr_ctx, "out_channel_layout", dst_ch_layout, 0);
-    //         av_opt_set_int(swr_ctx, "out_sample_rate", dst_rate, 0);
-    //         av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", dst_sample_fmt, 0);
-    //
-    //         if ((ret = swr_init(swr_ctx)) < 0) {
-    //             spdlog::error("Failed to initialize the resampling context");
-    //             return -1;
-    //         }
-    //
-    //         src_nb_channels = av_get_channel_layout_nb_channels(src_ch_layout);
-    //
-    //         ret = av_samples_alloc_array_and_samples(&src_data_, &src_linesize,
-    //             src_nb_channels, src_nb_samples,
-    //             src_sample_fmt, 0);
-    //         if (ret < 0) {
-    //             spdlog::error("Could not allocate source samples");
-    //             return -1;
-    //         }
-    //         src_nb_samples_ = src_nb_samples;
-    //
-    //         dst_nb_channels = av_get_channel_layout_nb_channels(dst_ch_layout);
-    //
-    //         ret = av_samples_alloc_array_and_samples(&dst_data_, &dst_linesize,
-    //             dst_nb_channels, dst_nb_samples_,
-    //             dst_sample_fmt, 0);
-    //         if (ret < 0) {
-    //             spdlog::error("Could not allocate destination samples");
-    //             return -1;
-    //         }
-    //
-    //         int data_size = av_get_bytes_per_sample(dst_sample_fmt_);
-    //         audioPlayer.SetFormat(dst_rate, data_size * 8,
-    //                               dst_nb_channels);
-    //     }
-    //
-    //     int WriteInput(AVFrame *frame) {
-    //         int planar = av_sample_fmt_is_planar(src_sample_fmt_);
-    //         int data_size = av_get_bytes_per_sample(src_sample_fmt_);
-    //         if (planar) {
-    //             for (int ch = 0; ch < src_nb_channels; ch++) {
-    //                 memcpy(src_data_[ch], frame->data[ch],
-    //                        data_size * frame->nb_samples);
-    //             }
-    //         } else {
-    //             for (int i = 0; i < frame->nb_samples; i++) {
-    //                 for (int ch = 0; ch < src_nb_channels; ch++) {
-    //                     memcpy(src_data_[0], frame->data[ch] + data_size * i,
-    //                            data_size);
-    //                 }
-    //             }
-    //         }
-    //     }
-    //
-    //     int SwrConvert() {
-    //         int ret = swr_convert(swr_ctx, dst_data_, dst_nb_samples_,
-    //                               (const uint8_t **)src_data_, src_nb_samples_);
-    //         if (ret < 0) {
-    //             spdlog::error("Error while converting");
-    //             exit(1);
-    //         }
-    //
-    //         int dst_bufsize = av_samples_get_buffer_size(
-    //             &dst_linesize, dst_nb_channels,
-    //             ret, dst_sample_fmt_, 1);
-    //
-    //         return dst_bufsize;
-    //     }
-    //
-    //     void Close() {
-    //         if (src_data_)
-    //             av_freep(&src_data_[0]);
-    //
-    //         av_freep(&src_data_);
-    //
-    //         if (dst_data_)
-    //             av_freep(&dst_data_[0]);
-    //
-    //         av_freep(&dst_data_);
-    //         swr_free(&swr_ctx);
-    //     }
-    //
-    //     AudioPlayer audioPlayer;
-    //
-    // private:
-    //     SwrContext *swr_ctx;
-    //
-    //     uint8_t **src_data_;
-    //     uint8_t **dst_data_;
-    //
-    //     int src_nb_channels, dst_nb_channels;
-    //     int src_linesize, dst_linesize;
-    //     int src_nb_samples_, dst_nb_samples_;
-    //
-    //     AVSampleFormat dst_sample_fmt_;
-    //
-    //     AVSampleFormat src_sample_fmt_;
-    // };
 
     class AudioPlayer {
     public:
@@ -387,19 +240,33 @@ public:
             outputDevice = audioOutput->start();
         }
 
+        void pause() {
+            if (audioOutput) {
+                audioOutput->suspend();
+            }
+        }
+
+        void resume() {
+            if (audioOutput && audioOutput->state() == QAudio::SuspendedState) {
+                spdlog::info("resume");
+                audioOutput->resume();
+            }
+        }
+
         void writeData(const char *data, qint64 len) {
-            if (outputDevice)
+            if (outputDevice) {
+                resume();
                 outputDevice->write(data, len);
+            }
         }
 
         void Quit() {
             if (audioOutput) {
-                audioOutput->stop();
+                audioOutput->stop(); // 会自动清理 outputDevice
+                delete audioOutput;
+                audioOutput = nullptr;
+                outputDevice = nullptr; // 不需要 delete/close
             }
-            delete audioOutput;
-            audioOutput = nullptr;
-            delete outputDevice;
-            outputDevice = nullptr;
         }
 
     private:
@@ -553,8 +420,6 @@ public:
             av_freep(&dst_data_);
 
             swr_free(&swr_ctx);
-
-            audioPlayer.Quit();
         }
 
         AudioPlayer audioPlayer;

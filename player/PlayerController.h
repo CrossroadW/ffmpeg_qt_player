@@ -6,6 +6,11 @@
 #include <qobject.h>
 #include <future>
 #include <thread>
+
+extern "C" {
+#include <libavutil/frame.h>
+}
+
 class DecoderManager;
 class SystemClock;
 
@@ -18,7 +23,9 @@ enum class PlayerState {
     Error,
 };
 
-Q_DECLARE_METATYPE(VideoInfo);
+Q_DECLARE_METATYPE(VideoFrame);
+
+Q_DECLARE_METATYPE(VideoFrame2);
 
 class PlayerWidget;
 class RendererBridge;
@@ -28,16 +35,15 @@ class PlayerController : public QObject {
 
 public:
     PlayerController(PlayerWidget *rendererBridge);
-    ~PlayerController()override;
+    ~PlayerController() override;
     void Open(const std::string &url); // 支持本地/网络
     void Play();
-    void Quit();
-    void SeekTo(int64_t ms);
-
-    void Tick(); // 驱动状态机每帧更新，可用线程或定时器驱动
-
+    void Close();
+    void SeekTo(int64_t seek_pos);
+    std::pair<int64_t, int64_t> CurrentPosition() const;
 Q_SIGNALS:
-    void VideoFrameReady(VideoInfo const &frame);
+    void VideoFrameReady(VideoFrame2 frame);
+    void VideoFrameReady(VideoFrame frame);
     void AudioFrameReady(AudioFrame frame);
     void ErrorOccurred(std::string msg);
     void StateChanged(PlayerState state);
@@ -47,11 +53,12 @@ public:
         return mState;
     }
 
+    const auto &url() const {
+        return mUrl;
+    }
+
 private:
     PlayerState mState{PlayerState::Idle};
-    // std::shared_ptr<Demuxer> mDemuxer{};
-    // std::shared_ptr<DecoderManager> mDecoderManager{};
-    // std::shared_ptr<SystemClock> mClock{}; // 主时钟
     std::string mUrl{};
     std::jthread mReadTask{};
     std::jthread mVideoTask{};

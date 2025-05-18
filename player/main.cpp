@@ -4,11 +4,8 @@
 
 int main(int argc, char *argv[]) {
     QApplication a(argc, argv);
-     MainWindow  w{};
+    MainWindow w{};
     w.show();
-    // default log level print
-    auto level = spdlog::get_level();
-    spdlog::info("level: {}", static_cast<int>(level));
-
+    spdlog::set_level(spdlog::level::warn);
     return QApplication::exec();
 }

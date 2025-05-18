@@ -3,42 +3,67 @@
 #include <QPainter>
 #include <QDebug>
 
+static QRect
+scaleKeepAspectRatio(const QRect &outer, int inner_w, int inner_h) {
+    // 无效输入检查
+    if (inner_w <= 0 || inner_h <= 0)
+        return QRect(0, 0, 0, 0);
+
+    const int outer_w = outer.width();
+    const int outer_h = outer.height();
+
+    // 整数运算优化（避免浮点除法）
+    const bool width_limited = (outer_w * inner_h) < (outer_h * inner_w);
+    const int scaled_w =
+        width_limited ? outer_w : (inner_w * outer_h / inner_h);
+    const int scaled_h =
+        width_limited ? (inner_h * outer_w / inner_w) : outer_h;
+
+    // 一次性构造结果矩形（比分别设置x/y/width/height更快）
+    return QRect(
+        outer.left() + (outer_w - scaled_w) / 2, // 自动居中x
+        outer.top() + (outer_h - scaled_h) / 2, // 自动居中y
+        scaled_w,
+        scaled_h
+        );
+}
+
+
+// 优化第一版： 直接绘制到目标大小的图像，避免双重缩放
 void ImageYuvRender::paintEvent(QPaintEvent *event) {
     if (yuvData == nullptr || rgbaData == nullptr) {
         return;
     }
 
     QPainter painter(this);
+    const QRect viewRect = rect();
 
-    QImage rgbImage(rgbaData, width_, height_, QImage::Format_RGBA8888);
+    // 直接创建目标大小的图像，避免双重缩放
+    const QRect dstRect = scaleKeepAspectRatio(viewRect, width_, height_);
+    QImage rgbImage = QImage(
+        rgbaData,
+        width_,
+        height_,
+        QImage::Format_RGBA8888
+    ).scaled(dstRect.size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
 
-    const int window_with = width();
-    const int window_height = height();
-
-    float window_rate = (float)window_with / (float)window_height;
-    float imag_rate = (float)width_ / (float)height_;
-
-    int target_width;
-    int target_height;
-    int x;
-    int y;
-
-    if (window_rate > imag_rate) {
-        target_height = window_height;
-        target_width = target_height * imag_rate;
-        x = (window_with - target_width) / 2;
-        y = 0;
-    } else {
-        target_width = window_with;
-        target_height = target_width / imag_rate;
-        y = (window_height - target_height) / 2;
-        x = 0;
-    }
-    QSize tszie(target_width, target_height);
-
-    painter.drawImage(
-        x, y, rgbImage.scaled(tszie, Qt::KeepAspectRatioByExpanding));
+    painter.drawImage(dstRect, rgbImage);
 }
+
+// 未优化版
+// void ImageYuvRender::paintEvent(QPaintEvent *event) {
+//     if (yuvData == nullptr || rgbaData == nullptr) {
+//         return;
+//     }
+//
+//     QPainter painter(this);
+//
+//     QImage rgbImage(rgbaData, width_, height_, QImage::Format_RGBA8888);
+//
+//     QRect dst = scaleKeepAspectRatio(rect(), width_, height_);
+//     painter.drawImage(
+//         dst, rgbImage.scaled(dst.size(), Qt::KeepAspectRatioByExpanding));
+// }
 
 
 void ImageYuvRender::initData(int w, int h, int stride_width) {
